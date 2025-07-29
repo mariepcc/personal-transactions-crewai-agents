@@ -1,0 +1,4 @@
+crewai
+pyodbc
+dotenv
+pyodbc

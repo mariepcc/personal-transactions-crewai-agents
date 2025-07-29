@@ -1,13 +1,23 @@
 from crewai.tools import BaseTool
-from crewai import Agent, Task, Crew
+from crewai import Agent, Task, Crew, Process
+from crewai.project import CrewBase, agent, tool, task, crew
 import os
 import requests
 import pyodbc
 from dotenv import load_dotenv
+from langchain_openai import AzureChatOpenAI
 
 load_dotenv()
 
+llm = AzureChatOpenAI(
+    azure_deployment="gpt-4o",
+    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+    api_version="2024-12-01-preview",
+)
 
+
+@tool
 class CategoryLookupTool(BaseTool):
     name: str = "CategoryLookup"
     description: str = (
@@ -41,6 +51,7 @@ class CategoryLookupTool(BaseTool):
             return {"error": str(e)}
 
 
+@tool
 class AddExpenseTool(BaseTool):
     name: str = "AddExpense"
     description: str = (
@@ -79,52 +90,39 @@ class AddExpenseTool(BaseTool):
             return f"Failed to add expense: {response.status_code} - {response.text}"
 
 
-# Agent definition
-expense_agent = Agent(
-    role="Expense Processor",
-    goal="Understand user's expenses and insert them into the database",
-    backstory="""
-    You are an agent that helps users register financial transactions and activities within the context of a personal finance management app. Your main objective is to collect information from the user and then register it in a database using the available functions.
+@CrewBase
+class TransactionsCrew:
+    agents_config = "config/agents.yaml"
+    tasks_config = "config/tasks.yaml"
 
-    To register a transaction, you require the following data:
+    @agent
+    def transaction_agent(self) -> Agent:
+        return Agent(
+            config=self.agents_config["transaction_agent"],
+            tools=[CategoryLookupTool(), AddExpenseTool()],
+            verbose=True,
+            llm=llm,
+        )
 
-    - Type: A transaction can be either "Expense" or "Income." Expense transactions refer to movements that involve an outflow of money from the user. Income transactions represent the opposite. You must infer the type based on the information provided; do not ask the user directly for this information.
+    @task
+    def add_transaction_task(self) -> Task:
+        return Task(
+            config=self.tasks_config["add_transaction_task"],
+            agent=self.transaction_agent(),
+        )
 
-    - Category ID: A category represents a way to classify income and expense transactions. For example, income categories may include salary, fees, or dividends. Expense categories may include food, fuel, mortgage, health, entertainment, among others. To obtain the category ID, you must first query the categories registered by the user in the database using the {CategoryLookupTool} tool. Something that can help you infer the category is the transaction description. Do not ask the user for the category ID; only request the category name.
-
-    - User ID: It is a number that identifies the user you are interacting with. You will find it in the conversation context. Never ask the user for it.
-
-    - Date: This is the date when the transaction or financial movement occurred. You must identify it from the information provided by the user or from the conversation context. If you cannot determine it by any means, use today’s date, which is available in the conversation context.
-
-    - Amount: Represents the monetary value of the transaction. You must obtain this either from the user or from the conversation context.
-
-    - Description: Refers to a description of the transaction. You can obtain it from the user or the conversation context. If none is provided, generate a short description based on the available information.
-
-    Once you have gathered all the required information, you must proceed to register the transaction using the available tool functions.
-""",
-    tools=[CategoryLookupTool(), AddExpenseTool()],
-    verbose=True,
-)
+    @crew
+    def crew(self) -> Crew:
+        return Crew(
+            agents=[self.transaction_agent()],
+            tasks=[self.add_transaction_task()],
+            process=Process.sequential,
+        )
 
 
-user_expense_input = "I got today my salary. It was 1500 zł."
-
-add_expense_task = Task(
-    description=(
-        f"You will receive a user message about a recent transaction: '{user_expense_input}'. "
-        "Extract the following fields: amount, type, category name, date, description, and user_id (default is 1). "
-        "A transaction type can be either 'Expense' or 'Income.' Expense transactions refer to movements that involve an outflow of money from the user. Income transactions represent the opposite. You must infer the type based on the information provided; do not ask the user directly for this information."
-        "Use the CategoryLookup tool with type 'expense' or 'income' based on the input context to retrieve all relevant categories. "
-        "Choose the most appropriate and matching category name from the list and use its ID. "
-        "If the category is not found, ask the user to provide a valid one. "
-        "If the date is not provided or unclear, use today's date from the conversation context. "
-        "Then use the AddExpense tool to save the transaction."
-    ),
-    expected_output="Confirmation that the expense has been saved successfully.",
-    agent=expense_agent,
-)
-
-crew = Crew(agents=[expense_agent], tasks=[add_expense_task])
-
-result = crew.kickoff()
-print(result)
+if __name__ == "__main__":
+    crew_instance = TransactionsCrew()
+    result = crew_instance.crew().kickoff(
+        inputs={"user_expense_input": "I spent 790 zł on jacket on zalando."}
+    )
+    print(result)

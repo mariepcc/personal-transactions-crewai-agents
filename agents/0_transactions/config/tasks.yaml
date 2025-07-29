@@ -1,0 +1,13 @@
+add_transaction_task:
+  description: >
+    You will receive a user message about a recent transaction: '{user_expense_input}'.
+    Extract the following fields: amount, type, category name, date, description, and user_id (default is 1). 
+    A transaction type can be either 'Expense' or 'Income.' Expense transactions refer to movements that involve an outflow of money from the user. Income transactions represent the opposite. You must infer the type based on the information provided; do not ask the user directly for this information.
+    Use the CategoryLookup tool with type 'expense' or 'income' based on the input context to retrieve all relevant categories.
+    Choose the most appropriate and matching category name from the list and use its ID. 
+    If the category is not found, ask the user to provide a valid one. 
+    If the date is not provided or unclear, use today's date from the conversation context. 
+    Then use the AddExpense tool to save the transaction.
+  expected_output: >
+    Confirmation that the expense has been saved successfully.
+  agent: transaction_agent
