@@ -1,0 +1,7 @@
+<<<<<<< HEAD
+chainlit
+=======
+chainlit
+crewai
+macnotesapp
+>>>>>>> 3c632fb (transactions adding agent completed)

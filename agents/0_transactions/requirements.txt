@@ -1,0 +1,5 @@
+crewai 
+pyodbc
+dotenv
+pyodbc
+requests
