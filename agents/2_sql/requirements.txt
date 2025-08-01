@@ -1,4 +1,0 @@
-crewai
-pyodbc
-dotenv
-pyodbc

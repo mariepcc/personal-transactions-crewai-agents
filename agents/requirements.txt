@@ -4,3 +4,4 @@ dotenv
 pyodbc
 requests
 langchain_openai
+langchain_community
