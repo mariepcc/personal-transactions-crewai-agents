@@ -1,5 +1,6 @@
 from crewai.tools import BaseTool
 from crewai import Agent, Task, Crew, Process
+from crewai.flow.flow import Flow, listen, start
 from crewai.project import CrewBase, agent, task, crew
 import os
 import requests
@@ -202,6 +203,20 @@ class TransactionsCrew:
             allow_delegation=False,
         )
 
+    @agent
+    def manager_agent(self) -> Agent:
+        return Agent(
+            role="Finance Manager",
+            goal="Coordinate the team to analyze financial data and provide useful insights to the user.",
+            backstory=(
+                "You are a personal finance assistant responsible for overseeing tasks, "
+                "delegating them to the right specialists (transaction agent, SQL agent, data analyst, and report writer), "
+                "and ensuring the user gets accurate and clear information about their finances."
+            ),
+            llm=llm,
+            allow_delegation=True,
+        )
+
     @task
     def add_transaction_task(self) -> Task:
         return Task(
@@ -249,6 +264,8 @@ class TransactionsCrew:
             ],
             process=Process.hierarchical,
             manager_llm=llm,
+            manager_agent=self.manager_agent(),
+            planning=True,
         )
 
 
