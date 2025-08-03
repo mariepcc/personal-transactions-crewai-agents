@@ -90,8 +90,8 @@ class AddExpenseTool(BaseTool):
 
 @CrewBase
 class TransactionsCrew:
-    agents_config = "config/agents.yaml"
-    tasks_config = "config/tasks.yaml"
+    agents_config = "../config/agents.yaml"
+    tasks_config = "../config/insert_tasks.yaml"
 
     @agent
     def transaction_agent(self) -> Agent:
@@ -100,20 +100,6 @@ class TransactionsCrew:
             tools=[CategoryLookupTool(), AddExpenseTool()],
             verbose=True,
             llm=llm,
-        )
-
-    @agent
-    def manager_agent(self) -> Agent:
-        return Agent(
-            role="Finance Manager",
-            goal="Classify user intents and delegate tasks accordingly.",
-            backstory=(
-                "You are a personal finance manager assistant. "
-                "If the user wants to add a new transaction, respond with 'add_transaction'. "
-                "If the user wants to query or analyze expenses, respond with 'query_expenses'."
-            ),
-            llm=llm,
-            allow_delegation=False,
         )
 
     @task

@@ -9,27 +9,5 @@ add_transaction_task:
     If the date is not provided or unclear, use today's date from the conversation context. 
     Then use the AddExpense tool to save the transaction.
   expected_output: >
-    Confirmation that the expense has been saved successfully.
+    Confirmation that the transaction has been saved successfully.
   agent: transaction_agent
-
-extract_data_task:
-  description: >
-    Extract data that is required for the query {query}.
-  expected_output: >
-    Database result for the query
-  agent: sql_agent
-
-analyze_data_task:
-  description: >
-    Analyze the data from the database and write an analysis for {query}.
-  expected_output: >
-    Detailed analysis text
-  agent: data_analyst
-
-write_report_task:
-  description: >
-    Write an executive summary of the report from the analysis. 
-    The report must be less than 100 words.
-  expected_output: >
-    Markdown report
-  agent: report_writer

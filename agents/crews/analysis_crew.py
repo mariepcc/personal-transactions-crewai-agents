@@ -86,9 +86,9 @@ class CheckSQLTool(BaseTool):
 
 
 @CrewBase
-class TransactionsCrew:
-    agents_config = "config/agents.yaml"
-    tasks_config = "config/tasks.yaml"
+class AnalysisCrew:
+    agents_config = "../config/agents.yaml"
+    tasks_config = "../config/analysis_tasks.yaml"
 
     @agent
     def sql_agent(self) -> Agent:
@@ -162,7 +162,7 @@ class TransactionsCrew:
 
 
 if __name__ == "__main__":
-    crew_instance = TransactionsCrew()
+    crew_instance = AnalysisCrew()
     result = crew_instance.crew().kickoff(
         inputs={"query": "How much did I spend on groceries so far?"}
     )

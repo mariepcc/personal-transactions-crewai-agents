@@ -1,4 +1,3 @@
-import asyncio
 import chainlit as cl
 import sys
 import os
@@ -17,14 +16,6 @@ async def on_chat_start():
 @cl.on_message
 async def on_message(message: cl.Message):
     user_input = message.content
-
-    loop = asyncio.get_event_loop()
-
-    def run_flow():
-        flow = RoutingFlow()
-        flow.kickoff(inputs={"query": user_input})
-        return flow.execute_route()
-
-    result = await loop.run_in_executor(None, run_flow)
-
+    flow = RoutingFlow()
+    result = await flow.kickoff_async(inputs={"query": user_input})
     await cl.Message(content=str(result)).send()
