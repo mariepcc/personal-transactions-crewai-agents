@@ -1,277 +1,50 @@
-from crewai.tools import BaseTool
-from crewai import Agent, Task, Crew, Process
-from crewai.flow.flow import Flow, listen, start
-from crewai.project import CrewBase, agent, task, crew
-import os
-import requests
-import pyodbc
-from dotenv import load_dotenv
-from langchain_openai import AzureChatOpenAI
-from langchain_community.tools.sql_database.tool import (
-    InfoSQLDatabaseTool,
-    ListSQLDatabaseTool,
-    QuerySQLCheckerTool,
-    QuerySQLDataBaseTool,
-)
-from agents.util import DB
-
-load_dotenv()
-
-llm = AzureChatOpenAI(
-    azure_deployment="gpt-4o",
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    api_version="2024-12-01-preview",
-)
+from crewai.flow.flow import Flow, start, listen, router
+from pydantic import BaseModel
+from crews.AnalysisCrew import AnalysisCrew
+from crews.TransactionCrew import TransactionCrew
 
 
-class CategoryLookupTool(BaseTool):
-    name: str = "CategoryLookup"
-    description: str = (
-        "Fetches CategoryId, Name and Description by transaction type from SQL database"
-    )
-
-    def _run(self, category_type: str):
-        print(f"[CategoryLookupTool] Searching for category of type '{category_type}'")
-        try:
-            conn_str = os.getenv("AZURE_SQL_CONNECTION_STRING")
-            conn = pyodbc.connect(conn_str)
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT Id, Name, Description FROM Categories WHERE Type=?",
-                (category_type),
-            )
-            rows = cursor.fetchall()
-            cursor.close()
-            conn.close()
-
-            if rows:
-                categories = [
-                    {"id": row[0], "name": row[1], "description": row[2]}
-                    for row in rows
-                ]
-                return {"categories": categories}
-            else:
-                return {"error": f"Category of type '{category_type}' not found"}
-
-        except Exception as e:
-            return {"error": str(e)}
+class RoutingState(BaseModel):
+    query: str = ""
+    route_to: str = ""
 
 
-class AddExpenseTool(BaseTool):
-    name: str = "AddExpense"
-    description: str = (
-        "Adds an expense transaction by calling Azure Logic App HTTP trigger"
-    )
+class RoutingFlow(Flow[RoutingState]):
+    @start()
+    def receive_query(self, query: str):
+        self.state.query = query
 
-    def _run(
-        self,
-        amount: float,
-        category_id: int,
-        date: str,
-        type: str,
-        description: str = None,
-        user_id: int = 1,
-    ):
-        print(
-            f"[AddExpenseTool] Submitting expense: {amount}, cat_id={category_id}, date={date}, type={type}"
+    def classify_intent(self, query: str) -> str:
+        manager = TransactionCrew().manager_agent()
+        prompt = (
+            "Classify the intent of this user query. Reply only with 'add_transaction' or 'query_expenses'.\n"
+            f"User: {query}"
         )
-        logic_app_url = os.getenv("LOGIC_APP_URL")
-        if not logic_app_url:
-            return "Missing Logic App URL in environment variables."
+        response = manager.run(prompt)
+        intent = response.strip().lower()
+        if intent not in ["add_transaction", "query_expenses"]:
+            intent = "query_expenses"  # default fallback
+        return intent
 
-        payload = {
-            "Amount": amount,
-            "CategoryId": category_id,
-            "Date": date,
-            "Description": description,
-            "Type": type,
-            "UserId": user_id,
-        }
+    @router(classify_intent)
+    def route(self):
+        intent = self.classify_intent(self.state.query)
+        self.state.route_to = intent
+        return intent
 
-        response = requests.post(logic_app_url, json=payload)
-        if response.status_code == 202:
-            return "Expense added successfully!"
-        else:
-            return f"Failed to add expense: {response.status_code} - {response.text}"
+    @listen("transaction_crew")
+    def run_transaction_crew(self):
+        crew = TransactionCrew()
+        return crew.crew().kickoff(inputs={"query": self.state.query})
 
-
-class ListTablesTool(BaseTool):
-    name: str = "list_tables"
-    description: str = "Lists all tables in the connected SQL database."
-
-    def _run(self) -> str:
-        """
-        List the available tables in the database.
-        """
-        return ListSQLDatabaseTool(db=DB).invoke("")
-
-
-class TablesSchemaTool(BaseTool):
-    name: str = "tables_schema"
-    description: str = "Get the schema and sample rows for the specified tables."
-
-    def _run(self, tables: str) -> str:
-        """
-        Get the schema and sample rows for the specified tables.
-
-        Args:
-            tables (str): A comma-separated list of table names.
-
-        Returns:
-            str: A string containing the schema and sample rows for the specified tables.
-        """
-        tool = InfoSQLDatabaseTool(db=DB)
-        return tool.invoke(tables)
-
-
-class QerySQLDataTool(BaseTool):
-    name: str = "execute_sql"
-    description: str = "Executes a SQL query against the connected database."
-
-    def _run(self, sql_query: str) -> str:
-        """
-        Execute a SQL query against the database.
-
-        Args:
-            sql_query (str): The SQL query to execute.
-
-        Returns:
-            str: The result of the SQL query.
-        """
-        return QuerySQLDataBaseTool(db=DB).invoke(sql_query)
-
-
-class CheckSQLTool(BaseTool):
-    name: str = "check_sql"
-    description: str = "Checks the correctness of a SQL query and returns the corrected query if any issues are found."
-
-    def _run(self, sql_query: str) -> str:
-        """
-        Check the correctness of a SQL query.
-
-        Args:
-            sql_query (str): The SQL query to check.
-
-        Returns:
-            str: The corrected SQL query if any issues are found, otherwise the original query.
-        """
-        return QuerySQLCheckerTool(db=DB).invoke({"query": sql_query})
-
-
-@CrewBase
-class TransactionsCrew:
-    agents_config = "config/agents.yaml"
-    tasks_config = "config/tasks.yaml"
-
-    @agent
-    def transaction_agent(self) -> Agent:
-        return Agent(
-            config=self.agents_config["transaction_agent"],
-            tools=[CategoryLookupTool(), AddExpenseTool()],
-            verbose=True,
-            llm=llm,
-        )
-
-    @agent
-    def sql_agent(self) -> Agent:
-        return Agent(
-            config=self.agents_config["sql_agent"],
-            llm=llm,
-            tools=[
-                ListTablesTool(),
-                TablesSchemaTool(),
-                QerySQLDataTool(),
-                CheckSQLTool(),
-            ],
-            allow_delegation=False,
-        )
-
-    @agent
-    def data_analyst(self) -> Agent:
-        return Agent(
-            config=self.agents_config["data_analyst"],
-            llm=llm,
-            allow_delegation=False,
-        )
-
-    @agent
-    def report_writer(self) -> Agent:
-        return Agent(
-            config=self.agents_config["report_writer"],
-            llm=llm,
-            allow_delegation=False,
-        )
-
-    @agent
-    def manager_agent(self) -> Agent:
-        return Agent(
-            role="Finance Manager",
-            goal="Coordinate the team to analyze financial data and provide useful insights to the user.",
-            backstory=(
-                "You are a personal finance assistant responsible for overseeing tasks, "
-                "delegating them to the right specialists (transaction agent, SQL agent, data analyst, and report writer), "
-                "and ensuring the user gets accurate and clear information about their finances."
-            ),
-            llm=llm,
-            allow_delegation=True,
-        )
-
-    @task
-    def add_transaction_task(self) -> Task:
-        return Task(
-            config=self.tasks_config["add_transaction_task"],
-            agent=self.transaction_agent(),
-        )
-
-    @task
-    def extract_data_task(self) -> Task:
-        return Task(
-            config=self.tasks_config["extract_data_task"],
-            agent=self.sql_agent(),
-        )
-
-    @task
-    def analyze_data_task(self) -> Task:
-        return Task(
-            config=self.tasks_config["analyze_data_task"],
-            agent=self.data_analyst(),
-            context=[self.extract_data_task()],
-        )
-
-    @task
-    def write_report_task(self) -> Task:
-        return Task(
-            config=self.tasks_config["write_report_task"],
-            agent=self.report_writer(),
-            context=[self.analyze_data_task()],
-        )
-
-    @crew
-    def crew(self) -> Crew:
-        return Crew(
-            agents=[
-                self.transaction_agent(),
-                self.sql_agent(),
-                self.data_analyst(),
-                self.report_writer(),
-            ],
-            tasks=[
-                self.add_transaction_task(),
-                self.extract_data_task(),
-                self.analyze_data_task(),
-                self.write_report_task(),
-            ],
-            process=Process.hierarchical,
-            manager_llm=llm,
-            manager_agent=self.manager_agent(),
-            planning=True,
-        )
+    @listen("analysis_crew")
+    def run_analysis_crew(self):
+        crew = AnalysisCrew()
+        return crew.crew().kickoff(inputs={"query": self.state.query})
 
 
 if __name__ == "__main__":
-    crew_instance = TransactionsCrew()
-    result = crew_instance.crew().kickoff(
-        inputs={"query": "How much did i spend on groceries so far?"}
-    )
+    flow = RoutingFlow()
+    flow.kickoff(inputs={"query": "I spent 250 on a doctor appointment"})
+    result = flow.execute_route()
     print(result)
