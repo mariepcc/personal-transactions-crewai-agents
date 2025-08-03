@@ -1,7 +1,7 @@
 from crewai.flow.flow import Flow, start, listen, router
 from pydantic import BaseModel
-from crews.AnalysisCrew import AnalysisCrew
-from crews.TransactionCrew import TransactionCrew
+from crews.analysis_crew import AnalysisCrew
+from crews.transactions_crew import TransactionCrew
 
 
 class RoutingState(BaseModel):
@@ -23,7 +23,7 @@ class RoutingFlow(Flow[RoutingState]):
         response = manager.run(prompt)
         intent = response.strip().lower()
         if intent not in ["add_transaction", "query_expenses"]:
-            intent = "query_expenses"  # default fallback
+            intent = "query_expenses"
         return intent
 
     @router(classify_intent)

@@ -4,28 +4,27 @@ import sys
 import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from agents.main import TransactionsCrew
+from agents.main import RoutingFlow
 
 
 @cl.on_chat_start
 async def on_chat_start():
-    crew_instance = TransactionsCrew()
-    crew = crew_instance.crew()
-
     await cl.Message(
-        content="👋 Welcome! Please describe your expense to get started. For example: `I spent 55 zł on groceries.`"
+        content="👋 Welcome! Please describe your expense or question. For example: `I spent 55 zł on groceries.`"
     ).send()
-
-    cl.user_session.set("crew", crew)
 
 
 @cl.on_message
 async def on_message(message: cl.Message):
-    crew = cl.user_session.get("crew")
     user_input = message.content
 
-    # Run in background thread to avoid blocking
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, crew.kickoff, {"query": user_input})
+
+    def run_flow():
+        flow = RoutingFlow()
+        flow.kickoff(inputs={"query": user_input})
+        return flow.execute_route()
+
+    result = await loop.run_in_executor(None, run_flow)
 
     await cl.Message(content=str(result)).send()
