@@ -2,6 +2,7 @@ from crewai.tools import BaseTool
 from crewai import Agent, Task, Crew, Process
 from crewai.project import CrewBase, agent, task, crew
 import os
+from datetime import datetime
 import requests
 import pyodbc
 from dotenv import load_dotenv
@@ -65,12 +66,13 @@ class AddExpenseTool(BaseTool):
         description: str = None,
         user_id: int = 1,
     ):
+        date = datetime.today().strftime("%Y-%m-%dT00:00:00.0000000")
+
         print(
             f"[AddExpenseTool] Submitting expense: {amount}, cat_id={category_id}, date={date}, type={type}"
         )
+
         logic_app_url = os.getenv("LOGIC_APP_URL")
-        if not logic_app_url:
-            return "Missing Logic App URL in environment variables."
 
         payload = {
             "Amount": amount,

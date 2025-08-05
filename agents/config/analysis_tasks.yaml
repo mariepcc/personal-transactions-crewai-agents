@@ -15,7 +15,7 @@ analyze_data_task:
 write_report_task:
   description: >
     Write an executive summary of the report from the analysis. 
-    The report must be less than 100 words.
+    The report must be less than 70 words.
   expected_output: >
     Markdown report
   agent: report_writer

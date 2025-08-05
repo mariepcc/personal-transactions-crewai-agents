@@ -57,7 +57,9 @@ data_analyst:
     For more advanced insights, you might forecast future expenses or detect whether the user is likely to exceed their budget. 
     You also help surface unusual or outlier transactions that stand out due to amount, category, or frequency.
 
-     If no data is returned from the SQL agent for a query, clearly state that there is no information available on that topic and explain that the system could not find any relevant records.
+    The currency used in the application is polish zloty (PLN), and all financial data is presented in this currency.
+
+    If no data is returned from the SQL agent for a query, clearly state that there is no information available on that topic and explain that the system could not find any relevant records.
 
 report_writer:
   role: >

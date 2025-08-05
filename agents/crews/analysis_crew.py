@@ -1,3 +1,6 @@
+import logging
+import json
+import azure.functions as func
 from crewai.tools import BaseTool
 from crewai import Agent, Task, Crew, Process
 from crewai.project import CrewBase, agent, task, crew
@@ -27,9 +30,6 @@ class ListTablesTool(BaseTool):
     description: str = "Lists all tables in the connected SQL database."
 
     def _run(self) -> str:
-        """
-        List the available tables in the database.
-        """
         return ListSQLDatabaseTool(db=DB).invoke("")
 
 
@@ -38,15 +38,6 @@ class TablesSchemaTool(BaseTool):
     description: str = "Get the schema and sample rows for the specified tables."
 
     def _run(self, tables: str) -> str:
-        """
-        Get the schema and sample rows for the specified tables.
-
-        Args:
-            tables (str): A comma-separated list of table names.
-
-        Returns:
-            str: A string containing the schema and sample rows for the specified tables.
-        """
         tool = InfoSQLDatabaseTool(db=DB)
         return tool.invoke(tables)
 
@@ -56,15 +47,6 @@ class QerySQLDataTool(BaseTool):
     description: str = "Executes a SQL query against the connected database."
 
     def _run(self, sql_query: str) -> str:
-        """
-        Execute a SQL query against the database.
-
-        Args:
-            sql_query (str): The SQL query to execute.
-
-        Returns:
-            str: The result of the SQL query.
-        """
         return QuerySQLDataBaseTool(db=DB).invoke(sql_query)
 
 
@@ -73,15 +55,6 @@ class CheckSQLTool(BaseTool):
     description: str = "Checks the correctness of a SQL query and returns the corrected query if any issues are found."
 
     def _run(self, sql_query: str) -> str:
-        """
-        Check the correctness of a SQL query.
-
-        Args:
-            sql_query (str): The SQL query to check.
-
-        Returns:
-            str: The corrected SQL query if any issues are found, otherwise the original query.
-        """
         return QuerySQLCheckerTool(db=DB).invoke({"query": sql_query})
 
 
@@ -161,9 +134,21 @@ class AnalysisCrew:
         )
 
 
-if __name__ == "__main__":
-    crew_instance = AnalysisCrew()
-    result = crew_instance.crew().kickoff(
-        inputs={"query": "How much did I spend on groceries so far?"}
-    )
-    print(result)
+# Initialize crew once
+crew_instance = AnalysisCrew()
+crew = crew_instance.crew()
+
+
+def main(mytimer: func.TimerRequest) -> None:
+    logging.info("Timer trigger function started.")
+
+    # Hardcoded input for month summary
+    input_query = "Provide a summary of my monthly spending."
+
+    try:
+        result = crew.kickoff(inputs={"query": input_query})
+        logging.info(f"Crew kickoff result: {json.dumps(result)}")
+    except Exception as e:
+        logging.error(f"Error running crew kickoff: {str(e)}")
+
+    logging.info("Timer trigger function completed.")

@@ -9,7 +9,7 @@ from agents.main import RoutingFlow
 @cl.on_chat_start
 async def on_chat_start():
     await cl.Message(
-        content="👋 Welcome! Please describe your expense or question. For example: `I spent 55 zł on groceries.`"
+        content="👋 Hi! Please describe your expense or question. For example: `I spent 55 zł on groceries.`"
     ).send()
 
 
